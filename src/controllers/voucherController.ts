@@ -1,0 +1,688 @@
+import { Response } from "express";
+import { PrismaClient } from "@prisma/client";
+import { AuthRequest } from "../middleware/authMiddleware";
+import PDFDocument from "pdfkit";
+
+const prisma = new PrismaClient();
+
+export const getVouchers = async (req: AuthRequest, res: Response) => {
+  try {
+    const { search } = req.query;
+    const user = req.user;
+    const where: any = {};
+
+    if (user?.role === "STAFF") {
+      where.userId = user.id;
+    }
+
+    if (search) {
+      where.OR = [
+        { voucherNumber: { contains: String(search), mode: "insensitive" } },
+        { requestedBy: { contains: String(search), mode: "insensitive" } },
+      ];
+    }
+
+    const vouchers = await prisma.voucher.findMany({
+      where,
+      include: {
+        items: true,
+        user: { select: { name: true, email: true, role: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    res.json(vouchers);
+  } catch (error) {
+    console.error("Get vouchers error:", error);
+    res.status(500).json({ error: "Failed to fetch vouchers" });
+  }
+};
+
+export const getVoucherByNumber = async (req: AuthRequest, res: Response) => {
+  try {
+    const { voucherNumber } = req.params;
+    const user = req.user;
+
+    const voucher = await prisma.voucher.findUnique({
+      where: { voucherNumber },
+      include: { items: true, user: { select: { name: true, email: true } } },
+    });
+
+    if (!voucher) return res.status(404).json({ error: "Voucher not found" });
+
+    if (user?.role === "STAFF" && voucher.userId !== user.id) {
+      return res
+        .status(403)
+        .json({ error: "Unauthorized access to this voucher" });
+    }
+
+    res.json(voucher);
+  } catch (error) {
+    console.error("Get voucher by number error:", error);
+    res.status(500).json({ error: "Failed to fetch voucher by number" });
+  }
+};
+
+export const createVoucher = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized: User not found" });
+    }
+
+    const dbUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+
+    const {
+      items,
+      paymentMethod,
+      whtPercentage,
+      authorizedBy,
+      authorizedDate,
+      approvedBy,
+      approvedDate,
+      retirementDate,
+      cashAdvanced,
+      retirementNameSign,
+      requestedBy,
+      requestDate,
+    } = req.body;
+
+    const count = await prisma.voucher.count();
+    const voucherNumber = `PV-${String(count + 1).padStart(9, "0")}`;
+
+    const parsedItems = Array.isArray(items) ? items : [];
+
+    // Server-side calculation of item totals
+    const totalAmountGhc = parsedItems.reduce(
+      (sum: number, i: any) => sum + Number(i.ghcAmount || 0),
+      0,
+    );
+    const totalAmountUsd = parsedItems.reduce(
+      (sum: number, i: any) => sum + Number(i.usdAmount || 0),
+      0,
+    );
+
+    // AUTOMATED SERVER-SIDE RETIREMENT & VARIANCE CALCULATION
+    const invoiceAmount = totalAmountGhc;
+    let cashRetiredAmount = 0;
+    let cashReimbursedAmt = 0;
+
+    if (
+      cashAdvanced !== undefined &&
+      cashAdvanced !== null &&
+      cashAdvanced !== ""
+    ) {
+      const numericAdvance = Number(cashAdvanced);
+      const variance = numericAdvance - invoiceAmount;
+
+      // If advance is greater than expenses -> Refund due to company (Cash Retired)
+      cashRetiredAmount = variance > 0 ? variance : 0;
+
+      // If expenses are greater than advance -> Reimbursement due to staff
+      cashReimbursedAmt = variance < 0 ? Math.abs(variance) : 0;
+    }
+
+    const voucher = await prisma.voucher.create({
+      data: {
+        voucherNumber,
+        totalAmountGhc,
+        totalAmountUsd,
+        userId,
+        requestedBy: requestedBy || dbUser?.name || "Staff Member",
+        requestDate: requestDate ? new Date(requestDate) : new Date(),
+        paymentMethod: paymentMethod || undefined,
+        whtPercentage:
+          whtPercentage !== undefined ? Number(whtPercentage) : undefined,
+
+        authorizedBy: null,
+        authorizedDate: null,
+        approvedBy: null,
+        approvedDate: null,
+
+        retirementDate: retirementDate
+          ? new Date(retirementDate)
+          : cashAdvanced
+            ? new Date()
+            : null,
+        invoiceAmount,
+        cashRetiredAmount,
+        cashReimbursedAmt,
+        retirementNameSign: retirementNameSign || null,
+        items: {
+          create: parsedItems.map((i: any) => ({
+            expenseDate: i.expenseDate ? new Date(i.expenseDate) : new Date(),
+            description: i.description || "No description",
+            ghcAmount: Number(i.ghcAmount || 0),
+            usdAmount: Number(i.usdAmount || 0),
+          })),
+        },
+      },
+      include: { items: true },
+    });
+
+    res.status(201).json(voucher);
+  } catch (error) {
+    console.error("Create voucher error:", error);
+    res.status(500).json({ error: "Failed to create voucher" });
+  }
+};
+
+export const updateVoucher = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const user = req.user;
+    const {
+      voucherNumber,
+      paymentMethod,
+      whtPercentage,
+      cashAdvanced,
+      items,
+      requestedBy,
+    } = req.body;
+
+    const existingVoucher = await prisma.voucher.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+
+    if (!existingVoucher) {
+      return res.status(404).json({ error: "Voucher not found" });
+    }
+
+    if (user?.role === "STAFF" && existingVoucher.userId !== user.id) {
+      return res
+        .status(403)
+        .json({ error: "Unauthorized to update this voucher" });
+    }
+
+    let totalAmountGhc = existingVoucher.totalAmountGhc;
+    let totalAmountUsd = existingVoucher.totalAmountUsd;
+
+    if (items && Array.isArray(items)) {
+      totalAmountGhc = items.reduce(
+        (sum: number, i: any) => sum + Number(i.ghcAmount || 0),
+        0,
+      );
+      totalAmountUsd = items.reduce(
+        (sum: number, i: any) => sum + Number(i.usdAmount || 0),
+        0,
+      );
+    }
+
+    const invoiceAmount = totalAmountGhc;
+    let cashRetiredAmount = existingVoucher.cashRetiredAmount;
+    let cashReimbursedAmt = existingVoucher.cashReimbursedAmt;
+
+    if (
+      cashAdvanced !== undefined &&
+      cashAdvanced !== null &&
+      cashAdvanced !== ""
+    ) {
+      const numericAdvance = Number(cashAdvanced);
+      const variance = numericAdvance - invoiceAmount;
+      cashRetiredAmount = variance > 0 ? variance : 0;
+      cashReimbursedAmt = variance < 0 ? Math.abs(variance) : 0;
+    }
+
+    const updatedVoucher = await prisma.voucher.update({
+      where: { id },
+      data: {
+        voucherNumber: voucherNumber || existingVoucher.voucherNumber,
+        requestedBy:
+          requestedBy !== undefined ? requestedBy : existingVoucher.requestedBy,
+        paymentMethod: paymentMethod || existingVoucher.paymentMethod,
+        whtPercentage:
+          whtPercentage !== undefined
+            ? Number(whtPercentage)
+            : existingVoucher.whtPercentage,
+        totalAmountGhc,
+        totalAmountUsd,
+        invoiceAmount,
+        cashRetiredAmount,
+        cashReimbursedAmt,
+        items: items
+          ? {
+              deleteMany: {},
+              create: items.map((i: any) => ({
+                expenseDate: i.expenseDate
+                  ? new Date(i.expenseDate)
+                  : new Date(),
+                description: i.description || "No description",
+                ghcAmount: Number(i.ghcAmount || 0),
+                usdAmount: Number(i.usdAmount || 0),
+              })),
+            }
+          : undefined,
+      },
+      include: { items: true },
+    });
+
+    return res.json({ success: true, voucher: updatedVoucher });
+  } catch (err: any) {
+    console.error("Error updating voucher:", err);
+    return res
+      .status(500)
+      .json({ error: err.message || "Failed to update voucher" });
+  }
+};
+
+export const retireVoucher = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { cashAdvanced, retirementNameSign } = req.body;
+    const userId = req.user?.id;
+
+    let staffName = retirementNameSign;
+    if (!staffName && userId) {
+      const dbUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      });
+      staffName = dbUser?.name || "Verified Staff";
+    }
+
+    const voucher = await prisma.voucher.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+
+    if (!voucher) return res.status(404).json({ error: "Voucher not found" });
+
+    const invoiceAmount = voucher.totalAmountGhc;
+    const numericAdvance = Number(cashAdvanced || 0);
+    const variance = numericAdvance - invoiceAmount;
+
+    const cashRetiredAmount = variance > 0 ? variance : 0;
+    const cashReimbursedAmt = variance < 0 ? Math.abs(variance) : 0;
+
+    const updatedVoucher = await prisma.voucher.update({
+      where: { id },
+      data: {
+        retirementDate: new Date(),
+        invoiceAmount,
+        cashRetiredAmount,
+        cashReimbursedAmt,
+        retirementNameSign: staffName,
+      },
+      include: { items: true },
+    });
+
+    res.json({
+      message: "Voucher successfully retired and reconciled by server",
+      voucher: updatedVoucher,
+      varianceAnalysis: {
+        cashAdvanced: numericAdvance,
+        invoiceAmount,
+        status:
+          variance > 0
+            ? "REFUND_DUE_TO_COMPANY"
+            : variance < 0
+              ? "REIMBURSEMENT_DUE_TO_STAFF"
+              : "BALANCED",
+        amount: Math.abs(variance),
+      },
+    });
+  } catch (error) {
+    console.error("Retire voucher error:", error);
+    res.status(500).json({ error: "Failed to retire voucher" });
+  }
+};
+
+// Authorize Voucher (Admin Level)
+export const authorizeVoucher = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const user = req.user;
+
+    if (user?.role !== "ADMIN") {
+      return res
+        .status(403)
+        .json({ error: "Unauthorized: Requires admin privileges" });
+    }
+
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { name: true },
+    });
+
+    const voucher = await prisma.voucher.findUnique({ where: { id } });
+    if (!voucher) return res.status(404).json({ error: "Voucher not found" });
+
+    const updated = await prisma.voucher.update({
+      where: { id },
+      data: {
+        authorizedBy: dbUser?.name || "System Admin",
+        authorizedDate: new Date(),
+      },
+      include: { items: true },
+    });
+
+    return res.json({ success: true, voucher: updated });
+  } catch (error: any) {
+    console.error("Authorize voucher error:", error);
+    return res.status(500).json({ error: "Failed to authorize voucher" });
+  }
+};
+
+// Approve Voucher (Admin Level)
+export const approveVoucher = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const user = req.user;
+
+    if (user?.role !== "ADMIN") {
+      return res
+        .status(403)
+        .json({ error: "Unauthorized: Requires admin privileges" });
+    }
+
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { name: true },
+    });
+
+    const voucher = await prisma.voucher.findUnique({ where: { id } });
+    if (!voucher) return res.status(404).json({ error: "Voucher not found" });
+
+    const updated = await prisma.voucher.update({
+      where: { id },
+      data: {
+        approvedBy: dbUser?.name || "System Admin",
+        approvedDate: new Date(),
+      },
+      include: { items: true },
+    });
+
+    return res.json({ success: true, voucher: updated });
+  } catch (error: any) {
+    console.error("Approve voucher error:", error);
+    return res.status(500).json({ error: "Failed to approve voucher" });
+  }
+};
+
+export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
+  try {
+    const voucher = await prisma.voucher.findUnique({
+      where: { id: req.params.id },
+      include: { items: true },
+    });
+
+    if (!voucher) return res.status(404).json({ error: "Voucher not found" });
+
+    if (req.user?.role === "STAFF" && voucher.userId !== req.user.id) {
+      return res
+        .status(403)
+        .json({ error: "Unauthorized to download this PDF" });
+    }
+
+    const doc = new PDFDocument({ size: "A4", margin: 30 });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename=Voucher-${voucher.voucherNumber}.pdf`,
+    );
+    doc.pipe(res);
+
+    // Outer Frame & Header
+    doc.rect(30, 30, 535, 770).stroke();
+    doc.circle(535, 45, 8).stroke();
+    doc.moveTo(535, 34).lineTo(535, 56).stroke();
+    doc.moveTo(524, 45).lineTo(546, 45).stroke();
+
+    doc
+      .fontSize(11)
+      .font("Helvetica-Bold")
+      .text("EXPENSE PAYMENT VOUCHER", 30, 42, { align: "center" });
+    doc.fontSize(8).font("Helvetica-Bold");
+    doc.text(`PV #: ${voucher.voucherNumber}`, 45, 66);
+    doc.text(
+      `Date: ${new Date(voucher.createdAt).toLocaleDateString()}`,
+      400,
+      66,
+    );
+    doc.moveTo(30, 78).lineTo(565, 78).stroke();
+
+    // Itemized Table Header
+    const tableTop = 78;
+    doc.rect(30, tableTop, 80, 24).stroke();
+    doc.rect(110, tableTop, 275, 24).stroke();
+    doc.rect(385, tableTop, 180, 12).stroke();
+
+    doc.font("Helvetica-Bold").fontSize(8);
+    doc.text("Date", 30, tableTop + 8, { width: 80, align: "center" });
+    doc.text("Description", 115, tableTop + 8, { width: 265, align: "left" });
+    doc.text("Amount", 385, tableTop + 3, { width: 180, align: "center" });
+
+    doc.rect(385, tableTop + 12, 90, 12).stroke();
+    doc.rect(475, tableTop + 12, 90, 12).stroke();
+    doc.text("GHC", 385, tableTop + 15, { width: 90, align: "center" });
+    doc.text("USD", 475, tableTop + 15, { width: 90, align: "center" });
+
+    let currentY = tableTop + 24;
+    const rowHeight = 14;
+    const maxRows = 25;
+
+    for (let i = 0; i < maxRows; i++) {
+      const item = voucher.items[i];
+      doc.rect(30, currentY, 80, rowHeight).stroke();
+      doc.rect(110, currentY, 275, rowHeight).stroke();
+      doc.rect(385, currentY, 90, rowHeight).stroke();
+      doc.rect(475, currentY, 90, rowHeight).stroke();
+
+      if (item) {
+        doc.font("Helvetica").fontSize(7);
+        doc.text(
+          new Date(item.expenseDate).toLocaleDateString(),
+          32,
+          currentY + 3,
+          { width: 76, align: "center" },
+        );
+        doc.text(item.description, 115, currentY + 3, {
+          width: 265,
+          ellipsis: true,
+        });
+        doc.text(item.ghcAmount.toFixed(2), 385, currentY + 3, {
+          width: 85,
+          align: "right",
+        });
+        doc.text(item.usdAmount.toFixed(2), 475, currentY + 3, {
+          width: 85,
+          align: "right",
+        });
+      }
+      currentY += rowHeight;
+    }
+
+    // Total Row
+    doc.rect(30, currentY, 355, 16).stroke();
+    doc.rect(385, currentY, 90, 16).stroke();
+    doc.rect(475, currentY, 90, 16).stroke();
+
+    doc.font("Helvetica-Bold").fontSize(8);
+    doc.text("Total", 320, currentY + 4, { width: 60, align: "right" });
+    doc.text(`GHS ${voucher.totalAmountGhc.toFixed(2)}`, 385, currentY + 4, {
+      width: 85,
+      align: "right",
+    });
+    doc.text(`$ ${voucher.totalAmountUsd.toFixed(2)}`, 475, currentY + 4, {
+      width: 85,
+      align: "right",
+    });
+    currentY += 16;
+
+    // Signatures Block 1
+    const sigBlockHeight = 48;
+    doc.rect(30, currentY, 535, sigBlockHeight).stroke();
+    doc
+      .moveTo(208, currentY)
+      .lineTo(208, currentY + sigBlockHeight)
+      .stroke();
+    doc
+      .moveTo(386, currentY)
+      .lineTo(386, currentY + sigBlockHeight)
+      .stroke();
+
+    doc.font("Helvetica-Bold").fontSize(7.5);
+    doc.text("Request by:", 35, currentY + 3);
+    doc.text("Authorised:", 213, currentY + 3);
+    doc.text("Approved:", 391, currentY + 3);
+
+    doc.font("Helvetica").fontSize(7);
+    doc.text(`Name: ${voucher.requestedBy}`, 35, currentY + 13);
+    doc.text(
+      `Date: ${new Date(voucher.requestDate).toLocaleDateString()}`,
+      35,
+      currentY + 23,
+    );
+    doc.text("Signature: .........................", 35, currentY + 35);
+
+    doc.text(`Name: ${voucher.authorizedBy || ""}`, 213, currentY + 13);
+    doc.text(
+      `Date: ${voucher.authorizedDate ? new Date(voucher.authorizedDate).toLocaleDateString() : ""}`,
+      213,
+      currentY + 23,
+    );
+    doc.text("Signature: .........................", 213, currentY + 35);
+
+    doc.text(`Name: ${voucher.approvedBy || ""}`, 391, currentY + 13);
+    doc.text(
+      `Date: ${voucher.approvedDate ? new Date(voucher.approvedDate).toLocaleDateString() : ""}`,
+      391,
+      currentY + 23,
+    );
+    doc.text("Signature: .........................", 391, currentY + 35);
+
+    currentY += sigBlockHeight;
+
+    // Finance Manager Authorisation
+    const fmBlockHeight = 24;
+    doc.rect(30, currentY, 535, fmBlockHeight).stroke();
+    doc.font("Helvetica-Bold").fontSize(7.5);
+    doc.text("Finance Manager's Payment Authorisation:", 35, currentY + 3);
+    doc.font("Helvetica").fontSize(7);
+    doc.text(
+      "Sign: .......................................",
+      35,
+      currentY + 13,
+    );
+    doc.text(
+      "Date: .......................................",
+      220,
+      currentY + 13,
+    );
+
+    currentY += fmBlockHeight;
+
+    // Payment Method & WHT Section
+    const payBlockHeight = 46;
+    doc.rect(30, currentY, 535, payBlockHeight).stroke();
+    doc
+      .moveTo(208, currentY)
+      .lineTo(208, currentY + payBlockHeight)
+      .stroke();
+    doc
+      .moveTo(386, currentY)
+      .lineTo(386, currentY + payBlockHeight)
+      .stroke();
+
+    doc.font("Helvetica-Bold").fontSize(7.5);
+    doc.text("Paid by:", 35, currentY + 3);
+    doc.font("Helvetica").fontSize(7);
+    doc.text("Date: ..............................", 35, currentY + 18);
+    doc.text("Signature: ......................", 35, currentY + 32);
+
+    const pm = voucher.paymentMethod;
+    doc.font("Helvetica").fontSize(7);
+    doc.text(
+      `Petty Cash [ ${pm === "PETTY_CASH" ? "X" : " "} ]`,
+      213,
+      currentY + 6,
+    );
+    doc.text(
+      `Cheque      [ ${pm === "CHEQUE" ? "X" : " "} ]`,
+      213,
+      currentY + 18,
+    );
+    doc.text(
+      `Kowri        [ ${pm === "KOWRI" ? "X" : " "} ]`,
+      213,
+      currentY + 30,
+    );
+
+    doc.font("Helvetica-Bold").fontSize(7.5);
+    doc.text("WHT:", 391, currentY + 3);
+    doc.font("Helvetica").fontSize(7);
+    const wht = voucher.whtPercentage;
+    doc.text(`3% [ ${wht === 3 ? "X" : " "} ]`, 391, currentY + 12);
+    doc.text(`5% [ ${wht === 5 ? "X" : " "} ]`, 391, currentY + 22);
+    doc.text(`7.5% [ ${wht === 7.5 ? "X" : " "} ]`, 391, currentY + 32);
+
+    currentY += payBlockHeight;
+
+    // Received by & Retirement
+    const bottomHeight = 98;
+    doc.rect(30, currentY, 535, bottomHeight).stroke();
+    doc
+      .moveTo(320, currentY)
+      .lineTo(320, currentY + bottomHeight)
+      .stroke();
+
+    doc.font("Helvetica-Bold").fontSize(7.5);
+    doc.text("Received by:", 35, currentY + 6);
+    doc.font("Helvetica").fontSize(7);
+    doc.text(
+      "....................................................................",
+      35,
+      currentY + 22,
+    );
+    doc.text("Signature &", 35, currentY + 48);
+    doc.text("Date", 35, currentY + 56);
+    doc.text(
+      "....................................................................",
+      95,
+      currentY + 54,
+    );
+
+    doc.rect(325, currentY + 4, 235, 12).fillAndStroke("#e2e8f0", "#000000");
+    doc.fillColor("#000000").font("Helvetica-Bold").fontSize(7.5);
+    doc.text("RETIREMENT", 325, currentY + 6, { width: 235, align: "center" });
+
+    doc.font("Helvetica").fontSize(7);
+    doc.text(
+      `Date: ${voucher.retirementDate ? new Date(voucher.retirementDate).toLocaleDateString() : "..................................................."}`,
+      330,
+      currentY + 20,
+    );
+    doc.text(
+      `Invoice Amount: GHS ${voucher.invoiceAmount?.toFixed(2) || "......................................."}`,
+      330,
+      currentY + 35,
+    );
+
+    const isRetired = (voucher.cashRetiredAmount || 0) > 0;
+    const isReimbursed = (voucher.cashReimbursedAmt || 0) > 0;
+
+    doc.text(
+      `Cash [ ${isRetired ? "X" : " "} ] retired: GHS ${voucher.cashRetiredAmount ? voucher.cashRetiredAmount.toFixed(2) : "................................"}`,
+      330,
+      currentY + 50,
+    );
+    doc.text(
+      `[ ${isReimbursed ? "X" : " "} ] reimbursed: GHS ${voucher.cashReimbursedAmt ? voucher.cashReimbursedAmt.toFixed(2) : "................................"}`,
+      330,
+      currentY + 65,
+    );
+    doc.text(
+      `Name & Signature: ${voucher.retirementNameSign || "..............................................."}`,
+      330,
+      currentY + 80,
+    );
+
+    doc.end();
+  } catch (error) {
+    console.error("PDF generation error:", error);
+    res.status(500).json({ error: "Failed to generate PDF" });
+  }
+};

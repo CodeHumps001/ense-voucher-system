@@ -1,0 +1,69 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  STAFF
+}
+
+model User {
+  id                  String    @id @default(uuid())
+  email               String    @unique
+  name                String
+  password            String
+  role                Role      @default(STAFF)
+  isTemporaryPassword Boolean   @default(false)
+  resetToken          String?
+  resetTokenExpiry    DateTime?
+  createdAt           DateTime  @default(now())
+  vouchers            Voucher[]
+}
+
+enum PaymentMethod {
+  PETTY_CASH
+  CHEQUE
+  KOWRI
+}
+
+model Voucher {
+  id                  String         @id @default(uuid())
+  voucherNumber       String         @unique
+  createdAt           DateTime       @default(now())
+  paymentMethod       PaymentMethod  @default(PETTY_CASH)
+  whtPercentage       Float          @default(0.0)
+  totalAmountGhc      Float          @default(0.0)
+  totalAmountUsd      Float          @default(0.0)
+  
+  requestedBy         String
+  requestDate         DateTime
+  authorizedBy        String?
+  authorizedDate      DateTime?
+  approvedBy          String?
+  approvedDate        DateTime?
+  
+  retirementDate      DateTime?
+  invoiceAmount       Float?
+  cashRetiredAmount   Float?
+  cashReimbursedAmt   Float?
+  retirementNameSign  String?
+
+  userId              String
+  user                User           @relation(fields: [userId], references: [id])
+  items               VoucherItem[]
+}
+
+model VoucherItem {
+  id          String   @id @default(uuid())
+  voucherId   String
+  voucher     Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  expenseDate DateTime
+  description String
+  ghcAmount   Float
+  usdAmount   Float
+}
