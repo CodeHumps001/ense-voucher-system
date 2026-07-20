@@ -99,7 +99,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
       data: { resetToken, resetTokenExpiry },
     });
 
-    const resetLink = `http://localhost:3000/auth/reset-password?token=${resetToken}`;
+    const resetLink = `https://expense-voucher.vercel.app/auth/reset-password?token=${resetToken}`;
 
     await sendEmail({
       toEmail: user.email,
