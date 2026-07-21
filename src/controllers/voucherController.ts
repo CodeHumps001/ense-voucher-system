@@ -2,6 +2,7 @@ import { Response } from "express";
 
 import { AuthRequest } from "../middleware/authMiddleware";
 import PDFDocument from "pdfkit";
+import path from "path";
 import { prisma } from "../lib/prisma";
 
 export const getVouchers = async (req: AuthRequest, res: Response) => {
@@ -426,20 +427,25 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
 
     // Outer Frame & Header
     doc.rect(30, 30, 535, 770).stroke();
-    doc.circle(535, 45, 8).stroke();
-    doc.moveTo(535, 34).lineTo(535, 56).stroke();
-    doc.moveTo(524, 45).lineTo(546, 45).stroke();
+
+    // Embed actual logo image from public/logo.jpeg
+    try {
+      const logoPath = path.join(process.cwd(), "public", "logo.jpeg");
+      doc.image(logoPath, 42, 36, { width: 32, height: 32 });
+    } catch (err) {
+      console.error("Logo image could not be loaded for PDF:", err);
+    }
 
     doc
       .fontSize(11)
       .font("Helvetica-Bold")
-      .text("EXPENSE PAYMENT VOUCHER", 30, 42, { align: "center" });
+      .text("EXPENSE PAYMENT VOUCHER", 80, 42, { width: 400, align: "center" });
     doc.fontSize(8).font("Helvetica-Bold");
-    doc.text(`PV #: ${voucher.voucherNumber}`, 45, 66);
+    doc.text(`PV #: ${voucher.voucherNumber}`, 85, 64);
     doc.text(
       `Date: ${new Date(voucher.createdAt).toLocaleDateString()}`,
       400,
-      66,
+      64,
     );
     doc.moveTo(30, 78).lineTo(565, 78).stroke();
 
@@ -600,15 +606,11 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
       currentY + 6,
     );
     doc.text(
-      `Cheque      [ ${pm === "CHEQUE" ? "X" : " "} ]`,
+      `Cheque    [ ${pm === "CHEQUE" ? "X" : " "} ]`,
       213,
       currentY + 18,
     );
-    doc.text(
-      `Kowri        [ ${pm === "KOWRI" ? "X" : " "} ]`,
-      213,
-      currentY + 30,
-    );
+    doc.text(`Kowri     [ ${pm === "KOWRI" ? "X" : " "} ]`, 213, currentY + 30);
 
     doc.font("Helvetica-Bold").fontSize(7.5);
     doc.text("WHT:", 391, currentY + 3);
