@@ -331,7 +331,7 @@ export const createVoucher = async (req: AuthRequest, res: Response) => {
     const month = String(now.getMonth() + 1).padStart(2, "0");
     const year = String(now.getFullYear()).slice(-2);
     const randomNum = Math.floor(1000 + Math.random() * 9000);
-    const voucherNumber = `PV# P-${month}${year}${randomNum}`;
+    const voucherNumber = `P-${month}${year}${randomNum}`;
 
     const parsedItems = Array.isArray(items) ? items : [];
 
@@ -450,7 +450,7 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
       .font("Helvetica-Bold")
       .text("EXPENSE PAYMENT VOUCHER", 80, 42, { width: 400, align: "center" });
     doc.fontSize(8).font("Helvetica-Bold");
-    doc.text(`PV #: ${voucher.voucherNumber}`, 85, 64);
+    doc.text(`PV#: ${voucher.voucherNumber}`, 85, 64);
     doc.text(
       `Date: ${new Date(voucher.createdAt).toLocaleDateString()}`,
       400,
