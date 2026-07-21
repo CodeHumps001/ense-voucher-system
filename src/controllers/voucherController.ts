@@ -478,17 +478,17 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
 
     doc.font("Helvetica-Bold").fontSize(8);
     doc.text("Date", 30, tableTop + 8, { width: 70, align: "center" });
-    doc.text("Description", 105, tableTop + 8, { width: 320, align: "left" });
-    doc.text("Amount", 405, tableTop + 3, { width: 100, align: "center" });
+    doc.text("Description", 105, tableTop + 8, { width: 400, align: "left" });
+    doc.text("Amount", 405, tableTop + 3, { width: 80, align: "center" });
 
     doc.rect(405, tableTop + 12, 80, 12).stroke();
     doc.rect(485, tableTop + 12, 80, 12).stroke();
-    doc.text("GHC", 405, tableTop + 15, { width: 50, align: "center" });
-    doc.text("USD", 485, tableTop + 15, { width: 50, align: "center" });
+    doc.text("GHC", 405, tableTop + 15, { width: 40, align: "center" });
+    doc.text("USD", 485, tableTop + 15, { width: 40, align: "center" });
 
     let currentY = tableTop + 24;
     const rowHeight = 14;
-    const maxRows = 25;
+    const maxRows = 30;
 
     for (let i = 0; i < maxRows; i++) {
       const item = voucher.items[i];
