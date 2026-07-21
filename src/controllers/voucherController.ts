@@ -440,7 +440,7 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     // Embed logo image from public/logo.jpeg
     try {
       const logoPath = path.join(process.cwd(), "public", "logo.jpg");
-      doc.image(logoPath, 42, 36, { width: 32, height: 32 });
+      doc.image(logoPath, 515, 36, { width: 32, height: 32 });
     } catch (err) {
       console.error("Logo image could not be loaded for PDF:", err);
     }
