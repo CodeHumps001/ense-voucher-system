@@ -356,7 +356,7 @@ export const createVoucher = async (req: AuthRequest, res: Response) => {
       const now = new Date();
       const year = now.getFullYear();
       const month = String(now.getMonth() + 1).padStart(2, "0");
-      const yearMonthPrefix = `PV-${year}${month}-`;
+      const yearMonthPrefix = `PV-${year}${month}`;
 
       const startOfMonth = new Date(year, now.getMonth(), 1);
       const startOfNextMonth = new Date(year, now.getMonth() + 1, 1);
