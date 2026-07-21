@@ -1,11 +1,10 @@
 import { Response } from "express";
-import { PrismaClient } from "@prisma/client";
+
 import { AuthRequest } from "../middleware/authMiddleware";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { sendEmail } from "../services/emailServices";
-
-const prisma = new PrismaClient();
+import { prisma } from "../lib/prisma";
 
 // Create Staff or Admin Member (Admin Only)
 export const createStaffMember = async (req: AuthRequest, res: Response) => {

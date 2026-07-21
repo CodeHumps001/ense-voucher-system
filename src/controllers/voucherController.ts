@@ -1,9 +1,8 @@
 import { Response } from "express";
-import { PrismaClient } from "@prisma/client";
+
 import { AuthRequest } from "../middleware/authMiddleware";
 import PDFDocument from "pdfkit";
-
-const prisma = new PrismaClient();
+import { prisma } from "../lib/prisma";
 
 export const getVouchers = async (req: AuthRequest, res: Response) => {
   try {
