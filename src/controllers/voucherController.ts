@@ -295,9 +295,6 @@ export const approveVoucher = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// ==========================================
-// 1. CREATE VOUCHER CONTROLLER
-// ==========================================
 export const createVoucher = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -326,16 +323,8 @@ export const createVoucher = async (req: AuthRequest, res: Response) => {
       paidBy,
     } = req.body;
 
-    // Generate Voucher Code: PV-EGL{Month}{year}{random number} (e.g., PV-EGL07264812)
-    const now = new Date();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const year = String(now.getFullYear()).slice(-2);
-    const randomNum = Math.floor(1000 + Math.random() * 9000);
-    const voucherNumber = `P-${month}${year}${randomNum}`;
-
     const parsedItems = Array.isArray(items) ? items : [];
 
-    // Server-side calculation of item totals
     const totalAmountGhc = parsedItems.reduce(
       (sum: number, i: any) => sum + Number(i.ghcAmount || 0),
       0,
@@ -345,7 +334,6 @@ export const createVoucher = async (req: AuthRequest, res: Response) => {
       0,
     );
 
-    // AUTOMATED SERVER-SIDE RETIREMENT & VARIANCE CALCULATION
     const invoiceAmount = totalAmountGhc;
     let cashRetiredAmount = 0;
     let cashReimbursedAmt = 0;
@@ -362,43 +350,67 @@ export const createVoucher = async (req: AuthRequest, res: Response) => {
       cashReimbursedAmt = variance < 0 ? Math.abs(variance) : 0;
     }
 
-    const voucher = await prisma.voucher.create({
-      data: {
-        voucherNumber,
-        totalAmountGhc,
-        totalAmountUsd,
-        userId,
-        requestedBy: requestedBy || dbUser?.name || "Staff Member",
-        requestDate: requestDate ? new Date(requestDate) : new Date(),
-        paidBy: paidBy || null,
-        paymentMethod: paymentMethod || undefined,
-        whtPercentage:
-          whtPercentage !== undefined ? Number(whtPercentage) : undefined,
+    // Generate Voucher Number: PV-{YYYY}{MM}-{sequence} e.g. PV-202607-0001
+    // Wrapped in a transaction so concurrent requests can't get the same number
+    const voucher = await prisma.$transaction(async (tx: any) => {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const yearMonthPrefix = `PV-${year}${month}-`;
 
-        authorizedBy: null,
-        authorizedDate: null,
-        approvedBy: null,
-        approvedDate: null,
+      const startOfMonth = new Date(year, now.getMonth(), 1);
+      const startOfNextMonth = new Date(year, now.getMonth() + 1, 1);
 
-        retirementDate: retirementDate
-          ? new Date(retirementDate)
-          : cashAdvanced
-            ? new Date()
-            : null,
-        invoiceAmount,
-        cashRetiredAmount,
-        cashReimbursedAmt,
-        retirementNameSign: retirementNameSign || null,
-        items: {
-          create: parsedItems.map((i: any) => ({
-            expenseDate: i.expenseDate ? new Date(i.expenseDate) : new Date(),
-            description: i.description || "No description",
-            ghcAmount: Number(i.ghcAmount || 0),
-            usdAmount: Number(i.usdAmount || 0),
-          })),
+      const countThisMonth = await tx.voucher.count({
+        where: {
+          createdAt: {
+            gte: startOfMonth,
+            lt: startOfNextMonth,
+          },
         },
-      },
-      include: { items: true },
+      });
+
+      const sequence = String(countThisMonth + 1).padStart(4, "0");
+      const voucherNumber = `${yearMonthPrefix}${sequence}`;
+
+      return tx.voucher.create({
+        data: {
+          voucherNumber,
+          totalAmountGhc,
+          totalAmountUsd,
+          userId,
+          requestedBy: requestedBy || dbUser?.name || "Staff Member",
+          requestDate: requestDate ? new Date(requestDate) : new Date(),
+          paidBy: paidBy || null,
+          paymentMethod: paymentMethod || undefined,
+          whtPercentage:
+            whtPercentage !== undefined ? Number(whtPercentage) : undefined,
+
+          authorizedBy: null,
+          authorizedDate: null,
+          approvedBy: null,
+          approvedDate: null,
+
+          retirementDate: retirementDate
+            ? new Date(retirementDate)
+            : cashAdvanced
+              ? new Date()
+              : null,
+          invoiceAmount,
+          cashRetiredAmount,
+          cashReimbursedAmt,
+          retirementNameSign: retirementNameSign || null,
+          items: {
+            create: parsedItems.map((i: any) => ({
+              expenseDate: i.expenseDate ? new Date(i.expenseDate) : new Date(),
+              description: i.description || "No description",
+              ghcAmount: Number(i.ghcAmount || 0),
+              usdAmount: Number(i.usdAmount || 0),
+            })),
+          },
+        },
+        include: { items: true },
+      });
     });
 
     res.status(201).json(voucher);
