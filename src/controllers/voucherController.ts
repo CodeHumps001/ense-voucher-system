@@ -323,7 +323,7 @@ export const createVoucher = async (req: AuthRequest, res: Response) => {
       retirementNameSign,
       requestedBy,
       requestDate,
-      paidBy, // Received from frontend payload
+      paidBy,
     } = req.body;
 
     // Generate Voucher Code: PV-EGL{Month}{year}{random number} (e.g., PV-EGL07264812)
@@ -331,7 +331,7 @@ export const createVoucher = async (req: AuthRequest, res: Response) => {
     const month = String(now.getMonth() + 1).padStart(2, "0");
     const year = String(now.getFullYear()).slice(-2);
     const randomNum = Math.floor(1000 + Math.random() * 9000);
-    const voucherNumber = `PV-EGL${month}${year}${randomNum}`;
+    const voucherNumber = `PV# P-${month}${year}${randomNum}`;
 
     const parsedItems = Array.isArray(items) ? items : [];
 
