@@ -62,113 +62,6 @@ export const getVoucherByNumber = async (req: AuthRequest, res: Response) => {
   }
 };
 
-export const createVoucher = async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).json({ error: "Unauthorized: User not found" });
-    }
-
-    const dbUser = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { name: true },
-    });
-
-    const {
-      items,
-      paymentMethod,
-      whtPercentage,
-      authorizedBy,
-      authorizedDate,
-      approvedBy,
-      approvedDate,
-      retirementDate,
-      cashAdvanced,
-      retirementNameSign,
-      requestedBy,
-      requestDate,
-    } = req.body;
-
-    const count = await prisma.voucher.count();
-    const voucherNumber = `PV-EGL${String(count + 1).padStart(6, "0")}`;
-
-    const parsedItems = Array.isArray(items) ? items : [];
-
-    // Server-side calculation of item totals
-    const totalAmountGhc = parsedItems.reduce(
-      (sum: number, i: any) => sum + Number(i.ghcAmount || 0),
-      0,
-    );
-    const totalAmountUsd = parsedItems.reduce(
-      (sum: number, i: any) => sum + Number(i.usdAmount || 0),
-      0,
-    );
-
-    // AUTOMATED SERVER-SIDE RETIREMENT & VARIANCE CALCULATION
-    const invoiceAmount = totalAmountGhc;
-    let cashRetiredAmount = 0;
-    let cashReimbursedAmt = 0;
-
-    if (
-      cashAdvanced !== undefined &&
-      cashAdvanced !== null &&
-      cashAdvanced !== ""
-    ) {
-      const numericAdvance = Number(cashAdvanced);
-      const variance = numericAdvance - invoiceAmount;
-
-      // If advance is greater than expenses -> Refund due to company (Cash Retired)
-      cashRetiredAmount = variance > 0 ? variance : 0;
-
-      // If expenses are greater than advance -> Reimbursement due to staff
-      cashReimbursedAmt = variance < 0 ? Math.abs(variance) : 0;
-    }
-
-    const voucher = await prisma.voucher.create({
-      data: {
-        voucherNumber,
-        totalAmountGhc,
-        totalAmountUsd,
-        userId,
-        requestedBy: requestedBy || dbUser?.name || "Staff Member",
-        requestDate: requestDate ? new Date(requestDate) : new Date(),
-        paymentMethod: paymentMethod || undefined,
-        whtPercentage:
-          whtPercentage !== undefined ? Number(whtPercentage) : undefined,
-
-        authorizedBy: null,
-        authorizedDate: null,
-        approvedBy: null,
-        approvedDate: null,
-
-        retirementDate: retirementDate
-          ? new Date(retirementDate)
-          : cashAdvanced
-            ? new Date()
-            : null,
-        invoiceAmount,
-        cashRetiredAmount,
-        cashReimbursedAmt,
-        retirementNameSign: retirementNameSign || null,
-        items: {
-          create: parsedItems.map((i: any) => ({
-            expenseDate: i.expenseDate ? new Date(i.expenseDate) : new Date(),
-            description: i.description || "No description",
-            ghcAmount: Number(i.ghcAmount || 0),
-            usdAmount: Number(i.usdAmount || 0),
-          })),
-        },
-      },
-      include: { items: true },
-    });
-
-    res.status(201).json(voucher);
-  } catch (error) {
-    console.error("Create voucher error:", error);
-    res.status(500).json({ error: "Failed to create voucher" });
-  }
-};
-
 export const updateVoucher = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
@@ -402,6 +295,122 @@ export const approveVoucher = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ==========================================
+// 1. CREATE VOUCHER CONTROLLER
+// ==========================================
+export const createVoucher = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized: User not found" });
+    }
+
+    const dbUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+
+    const {
+      items,
+      paymentMethod,
+      whtPercentage,
+      authorizedBy,
+      authorizedDate,
+      approvedBy,
+      approvedDate,
+      retirementDate,
+      cashAdvanced,
+      retirementNameSign,
+      requestedBy,
+      requestDate,
+      paidBy, // Received from frontend payload
+    } = req.body;
+
+    // Generate Voucher Code: PV-EGL{Month}{year}{random number} (e.g., PV-EGL07264812)
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const year = String(now.getFullYear()).slice(-2);
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    const voucherNumber = `PV-EGL${month}${year}${randomNum}`;
+
+    const parsedItems = Array.isArray(items) ? items : [];
+
+    // Server-side calculation of item totals
+    const totalAmountGhc = parsedItems.reduce(
+      (sum: number, i: any) => sum + Number(i.ghcAmount || 0),
+      0,
+    );
+    const totalAmountUsd = parsedItems.reduce(
+      (sum: number, i: any) => sum + Number(i.usdAmount || 0),
+      0,
+    );
+
+    // AUTOMATED SERVER-SIDE RETIREMENT & VARIANCE CALCULATION
+    const invoiceAmount = totalAmountGhc;
+    let cashRetiredAmount = 0;
+    let cashReimbursedAmt = 0;
+
+    if (
+      cashAdvanced !== undefined &&
+      cashAdvanced !== null &&
+      cashAdvanced !== ""
+    ) {
+      const numericAdvance = Number(cashAdvanced);
+      const variance = numericAdvance - invoiceAmount;
+
+      cashRetiredAmount = variance > 0 ? variance : 0;
+      cashReimbursedAmt = variance < 0 ? Math.abs(variance) : 0;
+    }
+
+    const voucher = await prisma.voucher.create({
+      data: {
+        voucherNumber,
+        totalAmountGhc,
+        totalAmountUsd,
+        userId,
+        requestedBy: requestedBy || dbUser?.name || "Staff Member",
+        requestDate: requestDate ? new Date(requestDate) : new Date(),
+        paidBy: paidBy || null,
+        paymentMethod: paymentMethod || undefined,
+        whtPercentage:
+          whtPercentage !== undefined ? Number(whtPercentage) : undefined,
+
+        authorizedBy: null,
+        authorizedDate: null,
+        approvedBy: null,
+        approvedDate: null,
+
+        retirementDate: retirementDate
+          ? new Date(retirementDate)
+          : cashAdvanced
+            ? new Date()
+            : null,
+        invoiceAmount,
+        cashRetiredAmount,
+        cashReimbursedAmt,
+        retirementNameSign: retirementNameSign || null,
+        items: {
+          create: parsedItems.map((i: any) => ({
+            expenseDate: i.expenseDate ? new Date(i.expenseDate) : new Date(),
+            description: i.description || "No description",
+            ghcAmount: Number(i.ghcAmount || 0),
+            usdAmount: Number(i.usdAmount || 0),
+          })),
+        },
+      },
+      include: { items: true },
+    });
+
+    res.status(201).json(voucher);
+  } catch (error) {
+    console.error("Create voucher error:", error);
+    res.status(500).json({ error: "Failed to create voucher" });
+  }
+};
+
+// ==========================================
+// 2. GENERATE VOUCHER PDF CONTROLLER
+// ==========================================
 export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
   try {
     const voucher = await prisma.voucher.findUnique({
@@ -428,9 +437,9 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     // Outer Frame & Header
     doc.rect(30, 30, 535, 770).stroke();
 
-    // Embed actual logo image from public/logo.jpeg
+    // Embed logo image from public/logo.jpeg
     try {
-      const logoPath = path.join(process.cwd(), "public", "logo.jpeg");
+      const logoPath = path.join(process.cwd(), "public", "logo.jpg");
       doc.image(logoPath, 42, 36, { width: 32, height: 32 });
     } catch (err) {
       console.error("Logo image could not be loaded for PDF:", err);
@@ -449,21 +458,21 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     );
     doc.moveTo(30, 78).lineTo(565, 78).stroke();
 
-    // Itemized Table Header
+    // Itemized Table Header (Wider Description, Smaller Amount & Date)
     const tableTop = 78;
-    doc.rect(30, tableTop, 80, 24).stroke();
-    doc.rect(110, tableTop, 275, 24).stroke();
-    doc.rect(385, tableTop, 180, 12).stroke();
+    doc.rect(30, tableTop, 70, 24).stroke(); // Date: 70px
+    doc.rect(100, tableTop, 305, 24).stroke(); // Description: 305px (Wider)
+    doc.rect(405, tableTop, 160, 12).stroke(); // Amount Container: 160px
 
     doc.font("Helvetica-Bold").fontSize(8);
-    doc.text("Date", 30, tableTop + 8, { width: 80, align: "center" });
-    doc.text("Description", 115, tableTop + 8, { width: 265, align: "left" });
-    doc.text("Amount", 385, tableTop + 3, { width: 180, align: "center" });
+    doc.text("Date", 30, tableTop + 8, { width: 70, align: "center" });
+    doc.text("Description", 105, tableTop + 8, { width: 320, align: "left" });
+    doc.text("Amount", 405, tableTop + 3, { width: 100, align: "center" });
 
-    doc.rect(385, tableTop + 12, 90, 12).stroke();
-    doc.rect(475, tableTop + 12, 90, 12).stroke();
-    doc.text("GHC", 385, tableTop + 15, { width: 90, align: "center" });
-    doc.text("USD", 475, tableTop + 15, { width: 90, align: "center" });
+    doc.rect(405, tableTop + 12, 80, 12).stroke();
+    doc.rect(485, tableTop + 12, 80, 12).stroke();
+    doc.text("GHC", 405, tableTop + 15, { width: 50, align: "center" });
+    doc.text("USD", 485, tableTop + 15, { width: 50, align: "center" });
 
     let currentY = tableTop + 24;
     const rowHeight = 14;
@@ -471,10 +480,10 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
 
     for (let i = 0; i < maxRows; i++) {
       const item = voucher.items[i];
-      doc.rect(30, currentY, 80, rowHeight).stroke();
-      doc.rect(110, currentY, 275, rowHeight).stroke();
-      doc.rect(385, currentY, 90, rowHeight).stroke();
-      doc.rect(475, currentY, 90, rowHeight).stroke();
+      doc.rect(30, currentY, 70, rowHeight).stroke();
+      doc.rect(100, currentY, 305, rowHeight).stroke();
+      doc.rect(405, currentY, 80, rowHeight).stroke();
+      doc.rect(485, currentY, 80, rowHeight).stroke();
 
       if (item) {
         doc.font("Helvetica").fontSize(7);
@@ -482,18 +491,18 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
           new Date(item.expenseDate).toLocaleDateString(),
           32,
           currentY + 3,
-          { width: 76, align: "center" },
+          { width: 66, align: "center" },
         );
-        doc.text(item.description, 115, currentY + 3, {
-          width: 265,
+        doc.text(item.description, 105, currentY + 3, {
+          width: 295,
           ellipsis: true,
         });
-        doc.text(item.ghcAmount.toFixed(2), 385, currentY + 3, {
-          width: 85,
+        doc.text(item.ghcAmount.toFixed(2), 405, currentY + 3, {
+          width: 75,
           align: "right",
         });
-        doc.text(item.usdAmount.toFixed(2), 475, currentY + 3, {
-          width: 85,
+        doc.text(item.usdAmount.toFixed(2), 485, currentY + 3, {
+          width: 75,
           align: "right",
         });
       }
@@ -501,18 +510,18 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     }
 
     // Total Row
-    doc.rect(30, currentY, 355, 16).stroke();
-    doc.rect(385, currentY, 90, 16).stroke();
-    doc.rect(475, currentY, 90, 16).stroke();
+    doc.rect(30, currentY, 375, 16).stroke();
+    doc.rect(405, currentY, 80, 16).stroke();
+    doc.rect(485, currentY, 80, 16).stroke();
 
     doc.font("Helvetica-Bold").fontSize(8);
-    doc.text("Total", 320, currentY + 4, { width: 60, align: "right" });
-    doc.text(`GHS ${voucher.totalAmountGhc.toFixed(2)}`, 385, currentY + 4, {
-      width: 85,
+    doc.text("Total", 340, currentY + 4, { width: 60, align: "right" });
+    doc.text(`GHS ${voucher.totalAmountGhc.toFixed(2)}`, 405, currentY + 4, {
+      width: 75,
       align: "right",
     });
-    doc.text(`$ ${voucher.totalAmountUsd.toFixed(2)}`, 475, currentY + 4, {
-      width: 85,
+    doc.text(`$ ${voucher.totalAmountUsd.toFixed(2)}`, 485, currentY + 4, {
+      width: 75,
       align: "right",
     });
     currentY += 16;
@@ -581,7 +590,7 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     currentY += fmBlockHeight;
 
     // Payment Method & WHT Section
-    const payBlockHeight = 46;
+    const payBlockHeight = 48;
     doc.rect(30, currentY, 535, payBlockHeight).stroke();
     doc
       .moveTo(208, currentY)
@@ -595,8 +604,19 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     doc.font("Helvetica-Bold").fontSize(7.5);
     doc.text("Paid by:", 35, currentY + 3);
     doc.font("Helvetica").fontSize(7);
-    doc.text("Date: ..............................", 35, currentY + 18);
-    doc.text("Signature: ......................", 35, currentY + 32);
+
+    // Print PaidBy Name and Payment Date
+    doc.text(
+      `Name: ${voucher.paidBy || "................................"}`,
+      35,
+      currentY + 13,
+    );
+    const paymentTimestamp = voucher.approvedDate || voucher.createdAt;
+    const formattedPaymentDate = paymentTimestamp
+      ? new Date(paymentTimestamp).toLocaleDateString()
+      : "..............................";
+    doc.text(`Date: ${formattedPaymentDate}`, 35, currentY + 23);
+    doc.text("Signature: ......................", 35, currentY + 35);
 
     const pm = voucher.paymentMethod;
     doc.font("Helvetica").fontSize(7);

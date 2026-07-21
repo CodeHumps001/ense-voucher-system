@@ -1,8 +1,7 @@
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
- 
-  directUrl = env("DIRECT_URL")
+  
 }
 
 generator client {
@@ -34,30 +33,31 @@ enum PaymentMethod {
 }
 
 model Voucher {
-  id                  String         @id @default(uuid())
-  voucherNumber       String         @unique
-  createdAt           DateTime       @default(now())
-  paymentMethod       PaymentMethod  @default(PETTY_CASH)
-  whtPercentage       Float          @default(0.0)
-  totalAmountGhc      Float          @default(0.0)
-  totalAmountUsd      Float          @default(0.0)
+  id                 String         @id @default(uuid())
+  voucherNumber      String         @unique
+  createdAt          DateTime       @default(now())
+  paymentMethod      PaymentMethod  @default(PETTY_CASH)
+  whtPercentage      Float          @default(0.0)
+  totalAmountGhc     Float          @default(0.0)
+  totalAmountUsd     Float          @default(0.0)
   
-  requestedBy         String
-  requestDate         DateTime
-  authorizedBy        String?
-  authorizedDate      DateTime?
-  approvedBy          String?
-  approvedDate        DateTime?
+  requestedBy        String
+  requestDate        DateTime
+  paidBy             String?        // <-- Added field for the person who paid
+  authorizedBy       String?
+  authorizedDate     DateTime?
+  approvedBy         String?
+  approvedDate       DateTime?
   
-  retirementDate      DateTime?
-  invoiceAmount       Float?
-  cashRetiredAmount   Float?
-  cashReimbursedAmt   Float?
-  retirementNameSign  String?
+  retirementDate     DateTime?
+  invoiceAmount      Float?
+  cashRetiredAmount  Float?
+  cashReimbursedAmt  Float?
+  retirementNameSign String?
 
-  userId              String
-  user                User           @relation(fields: [userId], references: [id])
-  items               VoucherItem[]
+  userId             String
+  user               User           @relation(fields: [userId], references: [id])
+  items              VoucherItem[]
 }
 
 model VoucherItem {
