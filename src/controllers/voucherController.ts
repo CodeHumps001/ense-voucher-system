@@ -89,7 +89,7 @@ export const createVoucher = async (req: AuthRequest, res: Response) => {
     } = req.body;
 
     const count = await prisma.voucher.count();
-    const voucherNumber = `PV-${String(count + 1).padStart(9, "0")}`;
+    const voucherNumber = `PV-EGL${String(count + 1).padStart(6, "0")}`;
 
     const parsedItems = Array.isArray(items) ? items : [];
 
