@@ -449,7 +449,6 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     // Outer Frame & Header
     doc.rect(30, 30, 535, 770).stroke();
 
-    // Embed logo image from public/logo.jpg
     try {
       const logoPath = path.join(process.cwd(), "public", "logo.jpg");
       doc.image(logoPath, 515, 36, { width: 32, height: 32 });
@@ -595,7 +594,7 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     currentY += sigBlockHeight;
 
     // Finance Manager Authorisation — now with real signing room
-    const fmBlockHeight = 48;
+    const fmBlockHeight = 50;
     doc.rect(30, currentY, 535, fmBlockHeight).stroke();
     doc.font("Helvetica-Bold").fontSize(8.5);
     doc.text("Finance Manager's Payment Authorisation:", 35, currentY + 5);
