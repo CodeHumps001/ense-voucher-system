@@ -502,18 +502,18 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
         doc.text(
           new Date(item.expenseDate).toLocaleDateString(),
           32,
-          currentY + 6,
+          currentY + 5,
           { width: 66, align: "center" },
         );
-        doc.text(item.description, 105, currentY + 6, {
+        doc.text(item.description, 105, currentY + 5, {
           width: 295,
           ellipsis: true,
         });
-        doc.text(item.ghcAmount.toFixed(2), 405, currentY + 6, {
+        doc.text(item.ghcAmount.toFixed(2), 405, currentY + 5, {
           width: 75,
           align: "right",
         });
-        doc.text(item.usdAmount.toFixed(2), 485, currentY + 6, {
+        doc.text(item.usdAmount.toFixed(2), 485, currentY + 5, {
           width: 75,
           align: "right",
         });
@@ -538,8 +538,8 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     });
     currentY += 18;
 
-    // Signatures Block 1
-    const sigBlockHeight = 52;
+    // Signatures Block 1 — extra room below the dotted line for actual pen signatures
+    const sigBlockHeight = 65;
     doc.rect(30, currentY, 535, sigBlockHeight).stroke();
     doc
       .moveTo(208, currentY)
@@ -562,7 +562,8 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
       35,
       currentY + 26,
     );
-    doc.text("Signature: .........................", 35, currentY + 38);
+    doc.text("Signature:", 35, currentY + 38);
+    doc.moveTo(75, currentY + 45).lineTo(195, currentY + 45).stroke();
 
     doc.text(`Name: ${voucher.authorizedBy || ""}`, 213, currentY + 15);
     doc.text(
@@ -570,7 +571,8 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
       213,
       currentY + 26,
     );
-    doc.text("Signature: .........................", 213, currentY + 38);
+    doc.text("Signature:", 213, currentY + 38);
+    doc.moveTo(253, currentY + 45).lineTo(373, currentY + 45).stroke();
 
     doc.text(`Name: ${voucher.approvedBy || ""}`, 391, currentY + 15);
     doc.text(
@@ -578,7 +580,8 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
       391,
       currentY + 26,
     );
-    doc.text("Signature: .........................", 391, currentY + 38);
+    doc.text("Signature:", 391, currentY + 38);
+    doc.moveTo(431, currentY + 45).lineTo(551, currentY + 45).stroke();
 
     currentY += sigBlockHeight;
 
@@ -588,21 +591,15 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     doc.font("Helvetica-Bold").fontSize(8.5);
     doc.text("Finance Manager's Payment Authorisation:", 35, currentY + 4);
     doc.font("Helvetica").fontSize(8);
-    doc.text(
-      "Sign: .......................................",
-      35,
-      currentY + 15,
-    );
-    doc.text(
-      "Date: .......................................",
-      220,
-      currentY + 15,
-    );
+    doc.text("Sign:", 35, currentY + 15);
+    doc.moveTo(60, currentY + 22).lineTo(200, currentY + 22).stroke();
+    doc.text("Date:", 220, currentY + 15);
+    doc.moveTo(245, currentY + 22).lineTo(360, currentY + 22).stroke();
 
     currentY += fmBlockHeight;
 
-    // Payment Method & WHT Section
-    const payBlockHeight = 52;
+    // Payment Method & WHT Section — extra room for the Paid-by signature
+    const payBlockHeight = 65;
     doc.rect(30, currentY, 535, payBlockHeight).stroke();
     doc
       .moveTo(208, currentY)
@@ -617,30 +614,19 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     doc.text("Paid by:", 35, currentY + 4);
     doc.font("Helvetica").fontSize(8);
 
-    doc.text(
-      `Name: ${voucher.paidBy || "................................"}`,
-      35,
-      currentY + 15,
-    );
+    doc.text(`Name: ${voucher.paidBy || "................................"}`, 35, currentY + 15);
     const paymentTimestamp = voucher.approvedDate || voucher.createdAt;
     const formattedPaymentDate = paymentTimestamp
       ? new Date(paymentTimestamp).toLocaleDateString()
       : "..............................";
     doc.text(`Date: ${formattedPaymentDate}`, 35, currentY + 26);
-    doc.text("Signature: ......................", 35, currentY + 38);
+    doc.text("Signature:", 35, currentY + 38);
+    doc.moveTo(75, currentY + 45).lineTo(195, currentY + 45).stroke();
 
     const pm = voucher.paymentMethod;
     doc.font("Helvetica").fontSize(8);
-    doc.text(
-      `Petty Cash [ ${pm === "PETTY_CASH" ? "X" : " "} ]`,
-      213,
-      currentY + 7,
-    );
-    doc.text(
-      `Cheque    [ ${pm === "CHEQUE" ? "X" : " "} ]`,
-      213,
-      currentY + 20,
-    );
+    doc.text(`Petty Cash [ ${pm === "PETTY_CASH" ? "X" : " "} ]`, 213, currentY + 7);
+    doc.text(`Cheque    [ ${pm === "CHEQUE" ? "X" : " "} ]`, 213, currentY + 20);
     doc.text(`Kowri     [ ${pm === "KOWRI" ? "X" : " "} ]`, 213, currentY + 33);
 
     doc.font("Helvetica-Bold").fontSize(8.5);
@@ -653,8 +639,8 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
 
     currentY += payBlockHeight;
 
-    // Received by & Retirement
-    const bottomHeight = 100;
+    // Received by & Retirement — extra room for the Received-by signature
+    const bottomHeight = 110;
     doc.rect(30, currentY, 535, bottomHeight).stroke();
     doc
       .moveTo(320, currentY)
@@ -664,18 +650,10 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     doc.font("Helvetica-Bold").fontSize(8.5);
     doc.text("Received by:", 35, currentY + 7);
     doc.font("Helvetica").fontSize(8);
-    doc.text(
-      "....................................................................",
-      35,
-      currentY + 24,
-    );
-    doc.text("Signature &", 35, currentY + 50);
-    doc.text("Date", 35, currentY + 58);
-    doc.text(
-      "....................................................................",
-      95,
-      currentY + 56,
-    );
+    doc.moveTo(35, currentY + 24).lineTo(290, currentY + 24).stroke();
+    doc.text("Signature &", 35, currentY + 55);
+    doc.text("Date", 35, currentY + 63);
+    doc.moveTo(95, currentY + 60).lineTo(290, currentY + 60).stroke();
 
     doc.rect(325, currentY + 5, 235, 13).fillAndStroke("#e2e8f0", "#000000");
     doc.fillColor("#000000").font("Helvetica-Bold").fontSize(8.5);
