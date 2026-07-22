@@ -449,7 +449,7 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     // Outer Frame & Header
     doc.rect(30, 30, 535, 770).stroke();
 
-    // Embed logo image from public/logo.jpeg
+    // Embed logo image from public/logo.jpg
     try {
       const logoPath = path.join(process.cwd(), "public", "logo.jpg");
       doc.image(logoPath, 515, 36, { width: 32, height: 32 });
@@ -458,37 +458,37 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     }
 
     doc
-      .fontSize(11)
+      .fontSize(13)
       .font("Helvetica-Bold")
-      .text("EXPENSE PAYMENT VOUCHER", 80, 42, { width: 400, align: "center" });
-    doc.fontSize(8).font("Helvetica-Bold");
-    doc.text(`PV#: ${voucher.voucherNumber}`, 85, 64);
+      .text("EXPENSE PAYMENT VOUCHER", 80, 40, { width: 400, align: "center" });
+    doc.fontSize(9).font("Helvetica-Bold");
+    doc.text(`PV#: ${voucher.voucherNumber}`, 85, 66);
     doc.text(
       `Date: ${new Date(voucher.createdAt).toLocaleDateString()}`,
       400,
-      64,
+      66,
     );
-    doc.moveTo(30, 78).lineTo(565, 78).stroke();
+    doc.moveTo(30, 82).lineTo(565, 82).stroke();
 
-    // Itemized Table Header (Wider Description, Smaller Amount & Date)
-    const tableTop = 78;
-    doc.rect(30, tableTop, 70, 24).stroke(); // Date: 70px
-    doc.rect(100, tableTop, 305, 24).stroke(); // Description: 305px (Wider)
-    doc.rect(405, tableTop, 160, 12).stroke(); // Amount Container: 160px
+    // Itemized Table Header
+    const tableTop = 82;
+    doc.rect(30, tableTop, 70, 26).stroke();
+    doc.rect(100, tableTop, 305, 26).stroke();
+    doc.rect(405, tableTop, 160, 13).stroke();
 
-    doc.font("Helvetica-Bold").fontSize(8);
-    doc.text("Date", 30, tableTop + 8, { width: 70, align: "center" });
-    doc.text("Description", 105, tableTop + 8, { width: 400, align: "left" });
+    doc.font("Helvetica-Bold").fontSize(9);
+    doc.text("Date", 30, tableTop + 9, { width: 70, align: "center" });
+    doc.text("Description", 105, tableTop + 9, { width: 400, align: "left" });
     doc.text("Amount", 405, tableTop + 3, { width: 80, align: "center" });
 
-    doc.rect(405, tableTop + 12, 80, 12).stroke();
-    doc.rect(485, tableTop + 12, 80, 12).stroke();
-    doc.text("GHC", 405, tableTop + 15, { width: 40, align: "center" });
-    doc.text("USD", 485, tableTop + 15, { width: 40, align: "center" });
+    doc.rect(405, tableTop + 13, 80, 13).stroke();
+    doc.rect(485, tableTop + 13, 80, 13).stroke();
+    doc.text("GHC", 405, tableTop + 16, { width: 40, align: "center" });
+    doc.text("USD", 485, tableTop + 16, { width: 40, align: "center" });
 
-    let currentY = tableTop + 24;
-    const rowHeight = 14;
-    const maxRows = 30;
+    let currentY = tableTop + 26;
+    const rowHeight = 20;
+    const maxRows = 20;
 
     for (let i = 0; i < maxRows; i++) {
       const item = voucher.items[i];
@@ -498,22 +498,22 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
       doc.rect(485, currentY, 80, rowHeight).stroke();
 
       if (item) {
-        doc.font("Helvetica").fontSize(7);
+        doc.font("Helvetica").fontSize(8);
         doc.text(
           new Date(item.expenseDate).toLocaleDateString(),
           32,
-          currentY + 3,
+          currentY + 6,
           { width: 66, align: "center" },
         );
-        doc.text(item.description, 105, currentY + 3, {
+        doc.text(item.description, 105, currentY + 6, {
           width: 295,
           ellipsis: true,
         });
-        doc.text(item.ghcAmount.toFixed(2), 405, currentY + 3, {
+        doc.text(item.ghcAmount.toFixed(2), 405, currentY + 6, {
           width: 75,
           align: "right",
         });
-        doc.text(item.usdAmount.toFixed(2), 485, currentY + 3, {
+        doc.text(item.usdAmount.toFixed(2), 485, currentY + 6, {
           width: 75,
           align: "right",
         });
@@ -522,24 +522,24 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     }
 
     // Total Row
-    doc.rect(30, currentY, 375, 16).stroke();
-    doc.rect(405, currentY, 80, 16).stroke();
-    doc.rect(485, currentY, 80, 16).stroke();
+    doc.rect(30, currentY, 375, 18).stroke();
+    doc.rect(405, currentY, 80, 18).stroke();
+    doc.rect(485, currentY, 80, 18).stroke();
 
-    doc.font("Helvetica-Bold").fontSize(8);
-    doc.text("Total", 340, currentY + 4, { width: 60, align: "right" });
-    doc.text(`GHS ${voucher.totalAmountGhc.toFixed(2)}`, 405, currentY + 4, {
+    doc.font("Helvetica-Bold").fontSize(9);
+    doc.text("Total", 340, currentY + 5, { width: 60, align: "right" });
+    doc.text(`GHS ${voucher.totalAmountGhc.toFixed(2)}`, 405, currentY + 5, {
       width: 75,
       align: "right",
     });
-    doc.text(`$ ${voucher.totalAmountUsd.toFixed(2)}`, 485, currentY + 4, {
+    doc.text(`$ ${voucher.totalAmountUsd.toFixed(2)}`, 485, currentY + 5, {
       width: 75,
       align: "right",
     });
-    currentY += 16;
+    currentY += 18;
 
     // Signatures Block 1
-    const sigBlockHeight = 48;
+    const sigBlockHeight = 52;
     doc.rect(30, currentY, 535, sigBlockHeight).stroke();
     doc
       .moveTo(208, currentY)
@@ -550,59 +550,59 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
       .lineTo(386, currentY + sigBlockHeight)
       .stroke();
 
-    doc.font("Helvetica-Bold").fontSize(7.5);
-    doc.text("Request by:", 35, currentY + 3);
-    doc.text("Authorised:", 213, currentY + 3);
-    doc.text("Approved:", 391, currentY + 3);
+    doc.font("Helvetica-Bold").fontSize(8.5);
+    doc.text("Request by:", 35, currentY + 4);
+    doc.text("Authorised:", 213, currentY + 4);
+    doc.text("Approved:", 391, currentY + 4);
 
-    doc.font("Helvetica").fontSize(7);
-    doc.text(`Name: ${voucher.requestedBy}`, 35, currentY + 13);
+    doc.font("Helvetica").fontSize(8);
+    doc.text(`Name: ${voucher.requestedBy}`, 35, currentY + 15);
     doc.text(
       `Date: ${new Date(voucher.requestDate).toLocaleDateString()}`,
       35,
-      currentY + 23,
+      currentY + 26,
     );
-    doc.text("Signature: .........................", 35, currentY + 35);
+    doc.text("Signature: .........................", 35, currentY + 38);
 
-    doc.text(`Name: ${voucher.authorizedBy || ""}`, 213, currentY + 13);
+    doc.text(`Name: ${voucher.authorizedBy || ""}`, 213, currentY + 15);
     doc.text(
       `Date: ${voucher.authorizedDate ? new Date(voucher.authorizedDate).toLocaleDateString() : ""}`,
       213,
-      currentY + 23,
+      currentY + 26,
     );
-    doc.text("Signature: .........................", 213, currentY + 35);
+    doc.text("Signature: .........................", 213, currentY + 38);
 
-    doc.text(`Name: ${voucher.approvedBy || ""}`, 391, currentY + 13);
+    doc.text(`Name: ${voucher.approvedBy || ""}`, 391, currentY + 15);
     doc.text(
       `Date: ${voucher.approvedDate ? new Date(voucher.approvedDate).toLocaleDateString() : ""}`,
       391,
-      currentY + 23,
+      currentY + 26,
     );
-    doc.text("Signature: .........................", 391, currentY + 35);
+    doc.text("Signature: .........................", 391, currentY + 38);
 
     currentY += sigBlockHeight;
 
     // Finance Manager Authorisation
-    const fmBlockHeight = 24;
+    const fmBlockHeight = 26;
     doc.rect(30, currentY, 535, fmBlockHeight).stroke();
-    doc.font("Helvetica-Bold").fontSize(7.5);
-    doc.text("Finance Manager's Payment Authorisation:", 35, currentY + 3);
-    doc.font("Helvetica").fontSize(7);
+    doc.font("Helvetica-Bold").fontSize(8.5);
+    doc.text("Finance Manager's Payment Authorisation:", 35, currentY + 4);
+    doc.font("Helvetica").fontSize(8);
     doc.text(
       "Sign: .......................................",
       35,
-      currentY + 13,
+      currentY + 15,
     );
     doc.text(
       "Date: .......................................",
       220,
-      currentY + 13,
+      currentY + 15,
     );
 
     currentY += fmBlockHeight;
 
     // Payment Method & WHT Section
-    const payBlockHeight = 48;
+    const payBlockHeight = 52;
     doc.rect(30, currentY, 535, payBlockHeight).stroke();
     doc
       .moveTo(208, currentY)
@@ -613,85 +613,84 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
       .lineTo(386, currentY + payBlockHeight)
       .stroke();
 
-    doc.font("Helvetica-Bold").fontSize(7.5);
-    doc.text("Paid by:", 35, currentY + 3);
-    doc.font("Helvetica").fontSize(7);
+    doc.font("Helvetica-Bold").fontSize(8.5);
+    doc.text("Paid by:", 35, currentY + 4);
+    doc.font("Helvetica").fontSize(8);
 
-    // Print PaidBy Name and Payment Date
     doc.text(
       `Name: ${voucher.paidBy || "................................"}`,
       35,
-      currentY + 13,
+      currentY + 15,
     );
     const paymentTimestamp = voucher.approvedDate || voucher.createdAt;
     const formattedPaymentDate = paymentTimestamp
       ? new Date(paymentTimestamp).toLocaleDateString()
       : "..............................";
-    doc.text(`Date: ${formattedPaymentDate}`, 35, currentY + 23);
-    doc.text("Signature: ......................", 35, currentY + 35);
+    doc.text(`Date: ${formattedPaymentDate}`, 35, currentY + 26);
+    doc.text("Signature: ......................", 35, currentY + 38);
 
     const pm = voucher.paymentMethod;
-    doc.font("Helvetica").fontSize(7);
+    doc.font("Helvetica").fontSize(8);
     doc.text(
       `Petty Cash [ ${pm === "PETTY_CASH" ? "X" : " "} ]`,
       213,
-      currentY + 6,
+      currentY + 7,
     );
     doc.text(
       `Cheque    [ ${pm === "CHEQUE" ? "X" : " "} ]`,
       213,
-      currentY + 18,
+      currentY + 20,
     );
-    doc.text(`Kowri     [ ${pm === "KOWRI" ? "X" : " "} ]`, 213, currentY + 30);
+    doc.text(`Kowri     [ ${pm === "KOWRI" ? "X" : " "} ]`, 213, currentY + 33);
 
-    doc.font("Helvetica-Bold").fontSize(7.5);
-    doc.text("WHT:", 391, currentY + 3);
-    doc.font("Helvetica").fontSize(7);
+    doc.font("Helvetica-Bold").fontSize(8.5);
+    doc.text("WHT:", 391, currentY + 4);
+    doc.font("Helvetica").fontSize(8);
     const wht = voucher.whtPercentage;
-    doc.text(`3% [ ${wht === 3 ? "X" : " "} ]`, 391, currentY + 12);
-    doc.text(`5% [ ${wht === 5 ? "X" : " "} ]`, 391, currentY + 22);
-    doc.text(`7.5% [ ${wht === 7.5 ? "X" : " "} ]`, 391, currentY + 32);
+    doc.text(`3% [ ${wht === 3 ? "X" : " "} ]`, 391, currentY + 14);
+    doc.text(`5% [ ${wht === 5 ? "X" : " "} ]`, 391, currentY + 25);
+    doc.text(`7.5% [ ${wht === 7.5 ? "X" : " "} ]`, 391, currentY + 36);
 
     currentY += payBlockHeight;
 
     // Received by & Retirement
-    const bottomHeight = 98;
+    const bottomHeight = 100;
     doc.rect(30, currentY, 535, bottomHeight).stroke();
     doc
       .moveTo(320, currentY)
       .lineTo(320, currentY + bottomHeight)
       .stroke();
 
-    doc.font("Helvetica-Bold").fontSize(7.5);
-    doc.text("Received by:", 35, currentY + 6);
-    doc.font("Helvetica").fontSize(7);
+    doc.font("Helvetica-Bold").fontSize(8.5);
+    doc.text("Received by:", 35, currentY + 7);
+    doc.font("Helvetica").fontSize(8);
     doc.text(
       "....................................................................",
       35,
-      currentY + 22,
+      currentY + 24,
     );
-    doc.text("Signature &", 35, currentY + 48);
-    doc.text("Date", 35, currentY + 56);
+    doc.text("Signature &", 35, currentY + 50);
+    doc.text("Date", 35, currentY + 58);
     doc.text(
       "....................................................................",
       95,
-      currentY + 54,
+      currentY + 56,
     );
 
-    doc.rect(325, currentY + 4, 235, 12).fillAndStroke("#e2e8f0", "#000000");
-    doc.fillColor("#000000").font("Helvetica-Bold").fontSize(7.5);
-    doc.text("RETIREMENT", 325, currentY + 6, { width: 235, align: "center" });
+    doc.rect(325, currentY + 5, 235, 13).fillAndStroke("#e2e8f0", "#000000");
+    doc.fillColor("#000000").font("Helvetica-Bold").fontSize(8.5);
+    doc.text("RETIREMENT", 325, currentY + 7, { width: 235, align: "center" });
 
-    doc.font("Helvetica").fontSize(7);
+    doc.font("Helvetica").fontSize(8);
     doc.text(
       `Date: ${voucher.retirementDate ? new Date(voucher.retirementDate).toLocaleDateString() : "..................................................."}`,
       330,
-      currentY + 20,
+      currentY + 22,
     );
     doc.text(
       `Invoice Amount: GHS ${voucher.invoiceAmount?.toFixed(2) || "......................................."}`,
       330,
-      currentY + 35,
+      currentY + 38,
     );
 
     const isRetired = (voucher.cashRetiredAmount || 0) > 0;
@@ -700,17 +699,17 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     doc.text(
       `Cash [ ${isRetired ? "X" : " "} ] retired: GHS ${voucher.cashRetiredAmount ? voucher.cashRetiredAmount.toFixed(2) : "................................"}`,
       330,
-      currentY + 50,
+      currentY + 54,
     );
     doc.text(
       `[ ${isReimbursed ? "X" : " "} ] reimbursed: GHS ${voucher.cashReimbursedAmt ? voucher.cashReimbursedAmt.toFixed(2) : "................................"}`,
       330,
-      currentY + 65,
+      currentY + 70,
     );
     doc.text(
       `Name & Signature: ${voucher.retirementNameSign || "..............................................."}`,
       330,
-      currentY + 80,
+      currentY + 86,
     );
 
     doc.end();
