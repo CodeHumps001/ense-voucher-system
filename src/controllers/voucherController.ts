@@ -486,7 +486,7 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     doc.text("USD", 485, tableTop + 16, { width: 40, align: "center" });
 
     let currentY = tableTop + 26;
-    const rowHeight = 16;
+    const rowHeight = 20;
     const maxRows = 20;
 
     for (let i = 0; i < maxRows; i++) {
