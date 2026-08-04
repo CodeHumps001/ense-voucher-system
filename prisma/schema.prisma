@@ -37,7 +37,7 @@ model Voucher {
   voucherNumber      String         @unique
   createdAt          DateTime       @default(now())
   paymentMethod      PaymentMethod  @default(PETTY_CASH)
-  whtPercentage      Float          @default(0.0)
+  whtPercentage      Float?          @default(0.0)
   totalAmountGhc     Float          @default(0.0)
   totalAmountUsd     Float          @default(0.0)
   
