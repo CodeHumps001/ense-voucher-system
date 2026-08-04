@@ -4,6 +4,7 @@ import {
   getVoucherByNumber,
   createVoucher,
   updateVoucher,
+  deleteVoucher,
   authorizeVoucher,
   approveVoucher,
   generateVoucherPDF,
@@ -18,6 +19,7 @@ router.get("/", getVouchers);
 router.get("/number/:voucherNumber", getVoucherByNumber);
 router.post("/", createVoucher);
 router.put("/:id", updateVoucher);
+router.delete("/:id", deleteVoucher);
 
 // Admin-exclusive sign-off endpoints
 router.patch("/:id/authorize", authorizeVoucher);

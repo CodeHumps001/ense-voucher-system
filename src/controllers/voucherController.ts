@@ -119,6 +119,15 @@ export const updateVoucher = async (req: AuthRequest, res: Response) => {
       cashReimbursedAmt = variance < 0 ? Math.abs(variance) : 0;
     }
 
+    const parsedWht =
+      whtPercentage !== undefined
+        ? whtPercentage !== null &&
+          whtPercentage !== "" &&
+          whtPercentage !== "none"
+          ? Number(whtPercentage)
+          : null
+        : existingVoucher.whtPercentage;
+
     const updatedVoucher = await prisma.voucher.update({
       where: { id },
       data: {
@@ -126,10 +135,7 @@ export const updateVoucher = async (req: AuthRequest, res: Response) => {
         requestedBy:
           requestedBy !== undefined ? requestedBy : existingVoucher.requestedBy,
         paymentMethod: paymentMethod || existingVoucher.paymentMethod,
-        whtPercentage:
-          whtPercentage !== undefined
-            ? Number(whtPercentage)
-            : existingVoucher.whtPercentage,
+        whtPercentage: parsedWht,
         totalAmountGhc,
         totalAmountUsd,
         invoiceAmount,
@@ -158,6 +164,38 @@ export const updateVoucher = async (req: AuthRequest, res: Response) => {
     return res
       .status(500)
       .json({ error: err.message || "Failed to update voucher" });
+  }
+};
+
+export const deleteVoucher = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const user = req.user;
+
+    const voucher = await prisma.voucher.findUnique({
+      where: { id },
+    });
+
+    if (!voucher) {
+      return res.status(404).json({ error: "Voucher not found" });
+    }
+
+    if (user?.role === "STAFF" && voucher.userId !== user.id) {
+      return res
+        .status(403)
+        .json({ error: "Unauthorized to delete this voucher" });
+    }
+
+    // Delete associated items and voucher in a transaction to prevent constraint violations
+    await prisma.$transaction([
+      prisma.voucherItem.deleteMany({ where: { voucherId: id } }),
+      prisma.voucher.delete({ where: { id } }),
+    ]);
+
+    return res.json({ success: true, message: "Voucher deleted successfully" });
+  } catch (error: any) {
+    console.error("Delete voucher error:", error);
+    return res.status(500).json({ error: "Failed to delete voucher" });
   }
 };
 
@@ -350,8 +388,16 @@ export const createVoucher = async (req: AuthRequest, res: Response) => {
       cashReimbursedAmt = variance < 0 ? Math.abs(variance) : 0;
     }
 
+    // Parse WHT Percentage: accepts null, empty, "none", or standard numbers (3, 5, 7.5)
+    const parsedWht =
+      whtPercentage !== undefined &&
+      whtPercentage !== null &&
+      whtPercentage !== "" &&
+      whtPercentage !== "none"
+        ? Number(whtPercentage)
+        : null;
+
     // Generate Voucher Number: PV-{YYYY}{MM}-{sequence} e.g. PV-202607-0001
-    // Wrapped in a transaction so concurrent requests can't get the same number
     const voucher = await prisma.$transaction(async (tx: any) => {
       const now = new Date();
       const year = now.getFullYear();
@@ -383,8 +429,7 @@ export const createVoucher = async (req: AuthRequest, res: Response) => {
           requestDate: requestDate ? new Date(requestDate) : new Date(),
           paidBy: paidBy || null,
           paymentMethod: paymentMethod || undefined,
-          whtPercentage:
-            whtPercentage !== undefined ? Number(whtPercentage) : undefined,
+          whtPercentage: parsedWht,
 
           authorizedBy: null,
           authorizedDate: null,
@@ -593,7 +638,7 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
 
     currentY += sigBlockHeight;
 
-    // Finance Manager Authorisation — now with real signing room
+    // Finance Manager Authorisation
     const fmBlockHeight = 50;
     doc.rect(30, currentY, 535, fmBlockHeight).stroke();
     doc.font("Helvetica-Bold").fontSize(8.5);
