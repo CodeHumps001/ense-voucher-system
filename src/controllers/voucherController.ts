@@ -483,6 +483,16 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
         .json({ error: "Unauthorized to download this PDF" });
     }
 
+    // Formats a date as DD/MM/YYYY
+    const formatDate = (date: Date | string | null | undefined): string => {
+      if (!date) return "";
+      const d = new Date(date);
+      const day = String(d.getDate()).padStart(2, "0");
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    };
+
     const doc = new PDFDocument({ size: "A4", margin: 30 });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
@@ -508,7 +518,7 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     doc.fontSize(9).font("Helvetica-Bold");
     doc.text(`PV#: ${voucher.voucherNumber}`, 85, 66);
     doc.text(
-      `Date: ${new Date(voucher.createdAt).toLocaleDateString()}`,
+      `Date: ${formatDate(voucher.createdAt)}`,
       400,
       66,
     );
@@ -544,7 +554,7 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
       if (item) {
         doc.font("Helvetica").fontSize(7.5);
         doc.text(
-          new Date(item.expenseDate).toLocaleDateString(),
+          formatDate(item.expenseDate),
           32,
           currentY + 4,
           { width: 66, align: "center" },
@@ -602,7 +612,7 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     doc.font("Helvetica").fontSize(8);
     doc.text(`Name: ${voucher.requestedBy}`, 35, currentY + 17);
     doc.text(
-      `Date: ${new Date(voucher.requestDate).toLocaleDateString()}`,
+      `Date: ${formatDate(voucher.requestDate)}`,
       35,
       currentY + 29,
     );
@@ -614,7 +624,7 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
 
     doc.text(`Name: ${voucher.authorizedBy || ""}`, 213, currentY + 17);
     doc.text(
-      `Date: ${voucher.authorizedDate ? new Date(voucher.authorizedDate).toLocaleDateString() : ""}`,
+      `Date: ${voucher.authorizedDate ? formatDate(voucher.authorizedDate) : ""}`,
       213,
       currentY + 29,
     );
@@ -626,7 +636,7 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
 
     doc.text(`Name: ${voucher.approvedBy || ""}`, 391, currentY + 17);
     doc.text(
-      `Date: ${voucher.approvedDate ? new Date(voucher.approvedDate).toLocaleDateString() : ""}`,
+      `Date: ${voucher.approvedDate ? formatDate(voucher.approvedDate) : ""}`,
       391,
       currentY + 29,
     );
@@ -681,7 +691,7 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
     );
     const paymentTimestamp = voucher.approvedDate || voucher.createdAt;
     const formattedPaymentDate = paymentTimestamp
-      ? new Date(paymentTimestamp).toLocaleDateString()
+      ? formatDate(paymentTimestamp)
       : "..............................";
     doc.text(`Date: ${formattedPaymentDate}`, 35, currentY + 29);
     doc.text("Signature:", 35, currentY + 42);
@@ -743,7 +753,7 @@ export const generateVoucherPDF = async (req: AuthRequest, res: Response) => {
 
     doc.font("Helvetica").fontSize(8);
     doc.text(
-      `Date: ${voucher.retirementDate ? new Date(voucher.retirementDate).toLocaleDateString() : "..................................................."}`,
+      `Date: ${voucher.retirementDate ? formatDate(voucher.retirementDate) : "..................................................."}`,
       330,
       currentY + 24,
     );
