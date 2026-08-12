@@ -358,6 +358,7 @@ export const createVoucher = async (req: AuthRequest, res: Response) => {
       retirementNameSign,
       requestedBy,
       requestDate,
+      createdAt, // <--- Added createdAt from frontend
       paidBy,
     } = req.body;
 
@@ -388,7 +389,6 @@ export const createVoucher = async (req: AuthRequest, res: Response) => {
       cashReimbursedAmt = variance < 0 ? Math.abs(variance) : 0;
     }
 
-    // Parse WHT Percentage: accepts null, empty, "none", or standard numbers (3, 5, 7.5)
     const parsedWht =
       whtPercentage !== undefined &&
       whtPercentage !== null &&
@@ -397,15 +397,15 @@ export const createVoucher = async (req: AuthRequest, res: Response) => {
         ? Number(whtPercentage)
         : null;
 
-    // Generate Voucher Number: PV-{YYYY}{MM}-{sequence} e.g. PV-202607-0001
     const voucher = await prisma.$transaction(async (tx: any) => {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, "0");
+      // Use custom createdAt if provided, otherwise default to now()
+      const recordDate = createdAt ? new Date(createdAt) : new Date();
+      const year = recordDate.getFullYear();
+      const month = String(recordDate.getMonth() + 1).padStart(2, "0");
       const yearMonthPrefix = `PV-${year}${month}`;
 
-      const startOfMonth = new Date(year, now.getMonth(), 1);
-      const startOfNextMonth = new Date(year, now.getMonth() + 1, 1);
+      const startOfMonth = new Date(year, recordDate.getMonth(), 1);
+      const startOfNextMonth = new Date(year, recordDate.getMonth() + 1, 1);
 
       const countThisMonth = await tx.voucher.count({
         where: {
@@ -422,6 +422,7 @@ export const createVoucher = async (req: AuthRequest, res: Response) => {
       return tx.voucher.create({
         data: {
           voucherNumber,
+          createdAt: recordDate, // <--- Explicitly sets custom record date if provided
           totalAmountGhc,
           totalAmountUsd,
           userId,
